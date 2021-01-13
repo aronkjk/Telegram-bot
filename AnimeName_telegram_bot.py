@@ -13,7 +13,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 moviesDB = imdb.IMDb()
-print(dir(moviesDB))
+# print(dir(moviesDB))
 
 # Define a few command handlers. These usually take the two arguments update and
 # context. Error handlers also receive the raised TelegramError object in error.
@@ -24,27 +24,58 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
-
+    update.message.reply_text('-Si el anime que busca es una saga o tiene partes en las que comparte titulo, puede incuir una _ al final de la busqueda para obtener un mejor resultado. \n-Si no se encuentra el anime que desea pruebe a escibirlo mejor.')
  
-def echo(update: Update, context: CallbackContext) -> None:
-    amime_name = update.message.new_chat_title
-    context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id)
-    message_text = amime_name + '\n'
-    movies = moviesDB.search_movie(amime_name)
-    id = movies[0].getID()
-    for movie in movies:
+def echoAnime(update: Update, context: CallbackContext) -> None:
+    if update.channel_post:
+        anime_name = update.channel_post.text
+        context.bot.delete_message(chat_id = update.channel_post.chat_id, message_id = update.channel_post.message_id)
+    
+    else:
+        anime_name = update.message.text
+        context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id)
 
-        print(movie['title'], movie['year'])
+    movies = moviesDB.search_movie(anime_name)
+
+    try:
+        id = movies[0].getID()
+    except:
+        context.bot.send_message(update.channel_post.chat_id, "No concidence with an anime")
+
+    for uf_movie in movies:
+        try:
+            id = uf_movie.getID()
+            movie = moviesDB.get_movie(id)
+            title = movie['title']
+            year = str(movie['year'])
+            genres = movie['genres']  
+            print(title, year)
+            
+            if genres[0] == 'Animation':
+                print('ANIME')
+                break
+
+        except:
+            print('Error')
 
     movie = moviesDB.get_movie(id)
     genres = movie['genres']
-    emoji_genre = ''
 
     if genres[0] != "Animation":
         update.message.reply_text("No concidence with an anime")
         return
 
+    message_text = createMessage(movie['title'], str(movie['year']), str(movie['rating']), movie['full-size cover url'], genres)
+
+    if update.channel_post:
+        context.bot.send_message(update.channel_post.chat_id, message_text)
+    else:
+        update.message.reply_text(message_text)
+
+    createPoll(update, context, movie['title'])
+   
+def genreToEmoji(genres) -> str:
+    emoji_genre = ''
     for genre in genres:
         if genre != "Animation":
             if genre == "Action":
@@ -99,17 +130,44 @@ def echo(update: Update, context: CallbackContext) -> None:
                 emoji_genre = emoji_genre + '⚔️'
             if genre == "Western":
                 emoji_genre = emoji_genre + '🤠'
- 
-    message_text = message_text + str(movie['year']) + ' A. D.\n' 
-    message_text = message_text + str(movie['rating']) + '/10\n'
-    message_text = message_text + 'Genres: ' + emoji.emojize(emoji_genre)
-    message_text = message_text + movie['cover'] + '\n'
-    update.message.reply_text(message_text)
 
-def delete_message(self, update: Update, context: CallbackContext) -> None:
-    context.bot.delete_message(chat_id = message.chat_id, message_id = message.message_id)
+    return emoji_genre
 
+def createMessage(title, year, rating, cover, genres) -> str:
+    message_text = title + '\n'
+    message_text = message_text + year + ' A. D.\n'
+    try:
+        message_text = message_text + rating + '/10\n'
+    except:
+        message_text = message_text + 'No rated\n'
+    try:
+        message_text = message_text + cover + '\n'
+    except:
+        message_text = message_text + 'No cover\n'
+    message_text = message_text + 'Genres: ' + emoji.emojize(genreToEmoji(genres))
 
+    return message_text
+
+def createPoll(update: Update, context: CallbackContext, anime) -> None:
+    """Sends a predefined poll"""
+    questions = ["👍",'😐', "👎"]
+    message = context.bot.send_poll(
+        update.effective_chat.id,
+        "Te ha gustado " + anime + '?',
+        questions,
+        is_anonymous=True,
+        allows_multiple_answers=True,
+    )
+    # Save some info about the poll the bot_data for later use in receive_poll_answer
+    payload = {
+        message.poll.id: {
+            "questions": questions,
+            "message_id": message.message_id,
+            "chat_id": update.effective_chat.id,
+            "answers": 0,
+        }
+    }
+    context.bot_data.update(payload)
 
 def main():
     """Start the bot."""
@@ -124,10 +182,9 @@ def main():
     # on different commands - answer in Telegram
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", help_command))
-#    dispatcher.add_handler(CommandHandler("name", name))
 
     # on noncommand i.e message - echo the message on Telegram
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echoAnime))
 
     # Start the Bot
     updater.start_polling()
@@ -135,10 +192,7 @@ def main():
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
-    updater.idle()
-
-    delete_message()        
-
+    updater.idle() 
 
 if __name__ == '__main__':
     main()
