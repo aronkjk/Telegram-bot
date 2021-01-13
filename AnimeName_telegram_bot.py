@@ -13,7 +13,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 moviesDB = imdb.IMDb()
-# print(dir(moviesDB))
 
 # Define a few command handlers. These usually take the two arguments update and
 # context. Error handlers also receive the raised TelegramError object in error.
@@ -149,7 +148,6 @@ def createMessage(title, year, rating, cover, genres) -> str:
     return message_text
 
 def createPoll(update: Update, context: CallbackContext, anime) -> None:
-    """Sends a predefined poll"""
     questions = ["👍",'😐', "👎"]
     message = context.bot.send_poll(
         update.effective_chat.id,
