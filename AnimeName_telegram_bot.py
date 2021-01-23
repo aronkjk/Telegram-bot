@@ -3,12 +3,13 @@ import imdb
 import emoji
 import time
 
+import psycopg2
+from psycopg2 import Error
+
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 sticker_L = 'CAACAgUAAxkBAAEBw91f_xpABQABvmb1qV278Ny9XuM7NIMAAs4AA8aZ-iD-CmEQhSPB7x4E'
-stack_search = 0
-cancel_search = False
 
 # Enable logging
 logging.basicConfig(
@@ -19,47 +20,56 @@ logger = logging.getLogger(__name__)
 
 moviesDB = imdb.IMDb()
 
-# Define a few command handlers. These usually take the two arguments update and
-# context. Error handlers also receive the raised TelegramError object in error.
+def connect_db():
+    try:
+        connection = psycopg2.connect(user="anime_bot",
+                                    password="ewq",
+                                    host="127.0.0.1",
+                                    port="5432",
+                                    database="animes")
+        return connection
+                                    
+    except (Exception, Error) as error:
+        print("Error while connecting to PostgreSQL: ", error)
+
+        return null
+
+def close_db(connection):
+    if (connection):
+        cursor.close()
+        connection.close()
+        print("PostgreSQL connection is closed")
+
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Hi!')
-
 
 def help_command(update: Update, context: CallbackContext):
     """Send a message when the command /help is issued."""
     update.message.reply_text('-Si el anime que busca es una saga o tiene partes en las que comparte titulo, puede incuir una _ al final de la busqueda para obtener un mejor resultado. \n-Si no se encuentra el anime que desea pruebe a escibirlo mejor.')
 
 def echoAnime(update: Update, context: CallbackContext):
-    global stack_search
-    global cancel_search
-
     if update.channel_post:
         anime_name = update.channel_post.text
-        context.bot.delete_message(chat_id = update.channel_post.chat_id, message_id = update.channel_post.message_id)
-        context.bot.send_sticker(chat_id = update.channel_post.chat_id, sticker = sticker_L)
+        chat_id = update.channel_post.chat_id
+        message_id = update.channel_post.message_id
         
     else:
         anime_name = update.message.text
-        context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id)
-        sticker_message = context.bot.send_sticker(chat_id = update.message.chat_id, sticker = sticker_L).message_id
-        print('Sticker_id: ', sticker_message)
-        
+        chat_id = update.message.chat_id
+        message_id = update.message.message_id
+
+    context.bot.delete_message(chat_id = chat_id, message_id = message_id)
+    sticker_id = context.bot.send_sticker(chat_id = chat_id, sticker = sticker_L).message_id
     movies = moviesDB.search_movie(anime_name)
 
     try:
         id = movies[0].getID()
+
     except:
-        if update.channel_post:
-            context.bot.delete_message(chat_id = update.channel_post.chat_id, message_id = update.channel_post.message_id + 1)
-        else:
-            context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id + 1)
+        context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
         return
 
     for uf_movie in movies:
-        if cancel_search:
-            cancel_search = False
-            return
-
         id = uf_movie.getID()
         movie = moviesDB.get_movie(id)
         title = movie['title']
@@ -67,6 +77,7 @@ def echoAnime(update: Update, context: CallbackContext):
         try:
             year = str(movie['year'])
             print(title, year)
+
         except:
             print(title, 'No year')
 
@@ -75,6 +86,7 @@ def echoAnime(update: Update, context: CallbackContext):
         try:
             airing = movie['number of episodes']
             print(airing)
+
         except:
             print('ERROR AIRING')
 
@@ -86,19 +98,47 @@ def echoAnime(update: Update, context: CallbackContext):
     genres = movie['genres']
 
     if genres[0] != "Animation":
-        if update.channel_post:
-            context.bot.delete_message(chat_id = update.channel_post.chat_id, message_id = update.channel_post.message_id + 1)
-        else:
-            context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id + 1)
+        context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
         return
+
+    try:
+        connection = connect_db()
+
+        # Create a cursor to perform database operations
+        cursor = connection.cursor()
+
+        # Search in database the anime
+        cursor.execute("SELECT name FROM animes where name = %s and chat_id = %s", (anime_name, update.message.chat_id))
+        record = cursor.fetchall()
+
+        if record[0]:
+            context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
+
+            close_db(connection)
+
+            #Go message of the anime introduced
+
+            print("CLOSED DB BY OBJECT REPEAT")
+            return
+
+        insert_query = """ INSERT INTO animes (name, message_id, chat_id) VALUES (s%,  s%, s%)"""
+        item_tuple = (anime_name, message_id, chat_id)
+        cursor.execute(insert_query, item_tuple)
+        connection.commit()
+
+    except (Exception, Error) as error:
+        print("Error while connecting to PostgreSQL", error)
+
+    finally:
+        close_db(connection)    
 
     message_text = createMessage(movie['title'], str(movie['year']), str(movie['rating']), movie['full-size cover url'], genres)
 
+    context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
+    
     if update.channel_post:
-        context.bot.delete_message(chat_id = update.channel_post.chat_id, message_id = update.channel_post.message_id + 1)
-        context.bot.send_message(update.channel_post.chat_id, message_text)
+        context.bot.send_message(chat_id, message_text)
     else:
-        context.bot.delete_message(chat_id = update.message.chat_id, message_id = update.message.message_id + 1)
         update.message.reply_text(message_text)
 
     createPoll(update, context, movie['title'])
