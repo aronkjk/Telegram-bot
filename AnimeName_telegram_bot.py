@@ -38,7 +38,7 @@ def close_db(connection):
     if (connection):
         cursor.close()
         connection.close()
-        print("PostgreSQL connection is closed")
+        print("Connection DB is closed")
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text('Hi!')
@@ -71,24 +71,15 @@ def echoAnime(update: Update, context: CallbackContext):
 
     for uf_movie in movies:
         id = uf_movie.getID()
+
         movie = moviesDB.get_movie(id)
-        title = movie['title']
 
         try:
-            year = str(movie['year'])
-            print(title, year)
+            genres = movie['genres']
 
         except:
-            print(title, 'No year')
-
-        genres = movie['genres']
-
-        try:
-            airing = movie['number of episodes']
-            print(airing)
-
-        except:
-            print('ERROR AIRING')
+            context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
+            return
 
         if genres[0] == 'Animation':
             print('ANIME')
@@ -103,47 +94,67 @@ def echoAnime(update: Update, context: CallbackContext):
 
     try:
         connection = connect_db()
-
-        # Create a cursor to perform database operations
         cursor = connection.cursor()
 
-        # Search in database the anime
-        cursor.execute("SELECT name FROM animes where name = %s and chat_id = %s", (anime_name, update.message.chat_id))
+        cursor.execute("SELECT name FROM message_id where name = %s and chat_id = %s", (movie['title'], chat_id))
         record = cursor.fetchall()
 
-        if record[0]:
+        if len(record) > 0:  
+            a = record[0][0]
+
             context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
 
             close_db(connection)
-
-            #Go message of the anime introduced
-
-            print("CLOSED DB BY OBJECT REPEAT")
-            return
-
-        insert_query = """ INSERT INTO animes (name, message_id, chat_id) VALUES (s%,  s%, s%)"""
-        item_tuple = (anime_name, message_id, chat_id)
-        cursor.execute(insert_query, item_tuple)
-        connection.commit()
+            
+            try:
+                context.bot.send_message(chat_id=chat_id, reply_to_message_id=a, text="🔝")
+                print("Closed DB because the object is repeat")
+                return
 
     except (Exception, Error) as error:
-        print("Error while connecting to PostgreSQL", error)
+        print("Error while connecting to DB, err: ", error)
 
     finally:
         close_db(connection)    
 
-    message_text = createMessage(movie['title'], str(movie['year']), str(movie['rating']), movie['full-size cover url'], genres)
+    if movie['kind'] == 'tv series':
+        year = movie['series years']
+
+        if len(year) < 7:
+            airing = '🔴'
+        
+        else:
+            airing = '✅'
+
+    else:
+        year = movie['year']
+
+    message_text = createMessage(movie['title'], str(year), str(movie['rating']), movie['full-size cover url'], genres, movie['runtimes'[0]], airing)
 
     context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
     
     if update.channel_post:
-        context.bot.send_message(chat_id, message_text)
+        anime_id = context.bot.send_message(chat_id, message_text).message_id
+
     else:
-        update.message.reply_text(message_text)
+        anime_id = update.message.reply_text(message_text).message_id
+
+    try:
+        connection = connect_db()
+        cursor = connection.cursor()
+        insert_query = """ INSERT INTO animes (name, message_id, chat_id) VALUES (%s, %s, %s);"""
+        item_tuple = (movie['title'], anime_id, chat_id)
+        cursor.execute(insert_query, item_tuple)
+        connection.commit()
+    
+    except (Exception, Error) as error:
+        print('Error while writting in DB, err: ', error)
+
+    finally:
+        close_db(connection)
 
     createPoll(update, context, movie['title'])
 
-   
 def genreToEmoji(genres) -> str:
     emoji_genre = ''
     for genre in genres:
@@ -203,17 +214,26 @@ def genreToEmoji(genres) -> str:
 
     return emoji_genre
 
-def createMessage(title, year, rating, cover, genres) -> str:
-    message_text = title + '                 ' + emoji.emojize(genreToEmoji(genres)) + '\n'
-    message_text = message_text + year + ' A. D.                 '
+def createMessage(title, year, rating, cover, genres, runtimes, airing = '') -> str:
+    message_text = title + '\n'
+    message_text = message_text + year + airing +'\n'
+
     try:
-        message_text = message_text + rating + '/10\n'
+        message_text = message_text + rating + '    '
     except:
-        message_text = message_text + 'No rated\n'
+        message_text = message_text + 'No rated    '
+
+    message_text = message_text + emoji.emojize(genreToEmoji(genres)) + '\n'
+
+    try:
+        message_text = message_text + runtimes + ' mins/cap' + ' \n'
+
+    except:
+        message_text = message_text + 'No runtimes data\n'
     try:
         message_text = message_text + cover + '\n'
     except:
-        message_text = message_text + 'No cover\n'
+        message_text = message_text + 'No cover'
 
     return message_text
 
@@ -246,7 +266,7 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    updater = Updater("TOKEN", use_context=True)
+    updater = Updater("1525820634:AAGYw3aewXXw6LHvDixOuMidUGOtenvreMo", use_context=True)
 
     # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
