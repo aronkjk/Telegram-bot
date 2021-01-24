@@ -90,7 +90,7 @@ def echoAnime(update: Update, context: CallbackContext):
         connection = connect_db()
         cursor = connection.cursor()
 
-        cursor.execute("SELECT name FROM message_id where name = %s and chat_id = %s", (movie['title'], chat_id))
+        cursor.execute("SELECT message_id FROM animes where name = %s and chat_id = %s", (movie['title'], chat_id))
         record = cursor.fetchall()
 
         if len(record) > 0:  
@@ -118,11 +118,12 @@ def echoAnime(update: Update, context: CallbackContext):
         year = movie['series years']
         aka = '📺'
         duration = ' mins/ep'
+        print(movie['episodes'].keys())
         if len(year) < 7:
-            airing = '🔴  ON AIR'
+            airing = '🔴'
         
         else:
-            airing = '✅  ENDED'
+            airing = '  ✅'
 
     else:
         year = movie['year']
@@ -216,15 +217,14 @@ def genreToEmoji(genres):
     return emoji_genre
 
 def createMessage(title, year, rating, cover, genres, runtimes, airing, aka, duration):
-    message_text = title + '    ' + aka + '\n'
-    message_text = message_text + year + airing +'\n'
+    message_text = title + '\n'
+    message_text = message_text + aka + '  ' + year + airing +'\n'
+    message_text = message_text + 'Genres: ' + emoji.emojize(genreToEmoji(genres)) + '\n'
 
     try:
-        message_text = message_text + rating + '    '
+        message_text = message_text + rating + '/10\n'
     except:
-        message_text = message_text + 'No rated    '
-
-    message_text = message_text + emoji.emojize(genreToEmoji(genres)) + '\n'
+        message_text = message_text + 'No rated\n'
 
     try:
         message_text = message_text + runtimes + duration + ' \n'
