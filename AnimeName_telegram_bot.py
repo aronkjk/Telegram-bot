@@ -16,11 +16,11 @@ sticker_L = 'CAACAgUAAxkBAAEBw91f_xpABQABvmb1qV278Ny9XuM7NIMAAs4AA8aZ-iD-CmEQhSP
 
 def connect_db():
     try:
-        connection = psycopg2.connect(user="anime_bot",
-                                    password="ewq",
-                                    host="127.0.0.1",
-                                    port="5432",
-                                    database="animes")
+        connection = psycopg2.connect(user="###",
+                                    password="###",
+                                    host="###",
+                                    port="###",
+                                    database="###")
         return connection
                                     
     except (Exception, Error) as error:
@@ -265,7 +265,7 @@ def cancel_search_command():
     cancel_search = True
 
 def main():
-    updater = Updater("1525820634:AAGYw3aewXXw6LHvDixOuMidUGOtenvreMo", use_context=True)
+    updater = Updater("TOKEN", use_context=True)
 
     dispatcher = updater.dispatcher
 
