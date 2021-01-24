@@ -9,16 +9,10 @@ from psycopg2 import Error
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-sticker_L = 'CAACAgUAAxkBAAEBw91f_xpABQABvmb1qV278Ny9XuM7NIMAAs4AA8aZ-iD-CmEQhSPB7x4E'
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
-)
-
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 moviesDB = imdb.IMDb()
+sticker_L = 'CAACAgUAAxkBAAEBw91f_xpABQABvmb1qV278Ny9XuM7NIMAAs4AA8aZ-iD-CmEQhSPB7x4E'
 
 def connect_db():
     try:
@@ -36,7 +30,7 @@ def connect_db():
 
 def close_db(connection):
     if (connection):
-        cursor.close()
+        connection.cursor().close()
         connection.close()
         print("Connection DB is closed")
 
@@ -110,6 +104,9 @@ def echoAnime(update: Update, context: CallbackContext):
                 context.bot.send_message(chat_id=chat_id, reply_to_message_id=a, text="🔝")
                 print("Closed DB because the object is repeat")
                 return
+            
+            except:
+                print('The message was deleted, creating a new tuple, delete old tuple in the future')
 
     except (Exception, Error) as error:
         print("Error while connecting to DB, err: ", error)
@@ -119,17 +116,21 @@ def echoAnime(update: Update, context: CallbackContext):
 
     if movie['kind'] == 'tv series':
         year = movie['series years']
-
+        aka = '📺'
+        duration = ' mins/ep'
         if len(year) < 7:
-            airing = '🔴'
+            airing = '🔴  ON AIR'
         
         else:
-            airing = '✅'
+            airing = '✅  ENDED'
 
     else:
         year = movie['year']
+        aka = '🎞'
+        duration = ' mins'
+        airing = ''
 
-    message_text = createMessage(movie['title'], str(year), str(movie['rating']), movie['full-size cover url'], genres, movie['runtimes'[0]], airing)
+    message_text = createMessage(movie['title'], str(year), str(movie['rating']), movie['full-size cover url'], genres, movie['runtimes'][0], airing, aka, duration)
 
     context.bot.delete_message(chat_id = chat_id, message_id = sticker_id)
     
@@ -155,7 +156,7 @@ def echoAnime(update: Update, context: CallbackContext):
 
     createPoll(update, context, movie['title'])
 
-def genreToEmoji(genres) -> str:
+def genreToEmoji(genres):
     emoji_genre = ''
     for genre in genres:
         if genre != "Animation":
@@ -214,8 +215,8 @@ def genreToEmoji(genres) -> str:
 
     return emoji_genre
 
-def createMessage(title, year, rating, cover, genres, runtimes, airing = '') -> str:
-    message_text = title + '\n'
+def createMessage(title, year, rating, cover, genres, runtimes, airing, aka, duration):
+    message_text = title + '    ' + aka + '\n'
     message_text = message_text + year + airing +'\n'
 
     try:
@@ -226,12 +227,14 @@ def createMessage(title, year, rating, cover, genres, runtimes, airing = '') -> 
     message_text = message_text + emoji.emojize(genreToEmoji(genres)) + '\n'
 
     try:
-        message_text = message_text + runtimes + ' mins/cap' + ' \n'
+        message_text = message_text + runtimes + duration + ' \n'
 
     except:
         message_text = message_text + 'No runtimes data\n'
+
     try:
         message_text = message_text + cover + '\n'
+
     except:
         message_text = message_text + 'No cover'
 
@@ -262,29 +265,17 @@ def cancel_search_command():
     cancel_search = True
 
 def main():
-    """Start the bot."""
-    # Create the Updater and pass it your bot's token.
-    # Make sure to set use_context=True to use the new context based callbacks
-    # Post version 12 this will no longer be necessary
     updater = Updater("1525820634:AAGYw3aewXXw6LHvDixOuMidUGOtenvreMo", use_context=True)
 
-    # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
 
-    # on different commands - answer in Telegram
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", help_command))
-    #dispatcher.add_handler(CommandHandler("cs", cancel_search_command))
 
-    # on noncommand i.e message - echo the message on Telegram
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echoAnime))
 
-    # Start the Bot
     updater.start_polling()
 
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle() 
 
 if __name__ == '__main__':
